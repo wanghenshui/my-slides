@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>reveal.js</title>
+
+    <link rel="stylesheet" href="reveal.js/dist/reset.css">
+    <link rel="stylesheet" href="reveal.js/dist/reveal.css">
+    <link rel="stylesheet" href="reveal.js/dist/theme/black.css" id="theme">
+
+    <!-- Theme used for syntax highlighted code -->
+    <link rel="stylesheet" href="reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
+</head>
+
+<body>
+
+    <div class="reveal">
+        <div class="slides">
+            <section data-markdown>
+                <textarea data-template>
+                ### Mongo 介绍
+                #### 架构
+                #### 核心逻辑
+                #### 代码技巧
+  						</textarea>
+            </section>
+            <section data-markdown>
+                <textarea data-template>
+                #### 一个典型的关系型数据库的架构
+                ![](./assets/main_components_of_a_dbms.png)
+                </textarea>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+
+                </textarea>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+
+                </textarea>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                ### 代码技巧
+                -  codegen 错误码生成，类生成
+                -  CRTP 单例模式
+                </textarea>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                #### 参考资料
+                - mongo分析 文档 https://blog.csdn.net/baijiwei/article/details/78070355
+                - 
+                Architecture of a Database System(中文版) http://dblab.xmu.edu.cn/wp-content/uploads/old/files/linziyu-Architecture%20of%20a%20Database%20System(Chinese%20Version)-ALL.pdf
+                
+                </textarea>
+            </section>
+        </div>
+    </div>
+
+
+    ​ </div>
+    ​ </div>
+
+    <script src="reveal.js/dist/reveal.js"></script>
+    <script src="reveal.js/plugin/notes/notes.js"></script>
+    <script src="reveal.js/plugin/markdown/markdown.js"></script>
+    <script src="reveal.js/plugin/highlight/highlight.js"></script>
+    <script>
+        // More info about initialization & config:
+        // - https://revealjs.com/initialization/
+        // - https://revealjs.com/config/
+        Reveal.initialize({
+            hash: true,
+
+            // Learn about plugins: https://revealjs.com/plugins/
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+        });
+    </script>
+</body>
+
+</html>
