@@ -2,6 +2,12 @@
 <html>
 
 <head>
+
+    <title>MongoDB 原理介绍</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
@@ -9,41 +15,341 @@
 
     <link rel="stylesheet" href="reveal.js/dist/reset.css">
     <link rel="stylesheet" href="reveal.js/dist/reveal.css">
-    <link rel="stylesheet" href="reveal.js/dist/theme/black.css" id="theme">
+    <link rel="stylesheet" href="assets/white.css" id="theme">
 
     <!-- Theme used for syntax highlighted code -->
     <link rel="stylesheet" href="reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
 </head>
 
 <body>
-
     <div class="reveal">
         <div class="slides">
             <section data-markdown>
                 <textarea data-template>
-                ### Mongo 介绍
+                ### MongoDB 介绍
                 #### 架构
-                #### 核心逻辑
+                #### 业务逻辑/原理
                 #### 代码技巧
-  						</textarea>
+  			</textarea>
             </section>
-            <section data-markdown>
-                <textarea data-template>
-                #### 一个典型的关系型数据库的架构
-                ![](./assets/main_components_of_a_dbms.png)
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                ##### 一个典型的关系型数据库的架构
+                - 对于mongo而言，大部分概念都是换了个名字，但是mongo在分布式的场景下，引入了一些概念
+
+                ![](./assets/main_components_of_a_dbms.png) <!-- .element height="60%" width="60%" -->
+                
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        | SQL术语/概念  | MongoDB 术语/概念   |
+                        | ---------- | ---------- |
+                        | database  | [database](https://docs.mongodb.com/manual/reference/glossary/#term-database) |
+                        | table | [collection](https://docs.mongodb.com/manual/reference/glossary/#term-collection) |
+                        | row | [document](https://docs.mongodb.com/manual/reference/glossary/#term-document) 或 [BSON](https://docs.mongodb.com/manual/reference/glossary/#term-bson) document |
+                        | column | [field](https://docs.mongodb.com/manual/reference/glossary/#term-field) |
+                        | index | [index](https://docs.mongodb.com/manual/reference/glossary/#term-index) |
+                        | table joins （表联接）| [$lookup](https://docs.mongodb.com/manual/reference/operator/aggregation/lookup/#pipe._S_lookup), `embedded documents （嵌入式文档）` |
+                        | primary key 指定任何唯一的列或者列组合作为主键 | [primary key](https://docs.mongodb.com/manual/reference/glossary/#term-primary-key) 在 MongoDB 中, 主键自动设置为 [_id](https://docs.mongodb.com/manual/reference/glossary/#term-id) 字段 |
+                        | aggregation (如：group by)| `aggregation pipeline （聚合管道）`参考：[SQL to Aggregation Mapping Chart](https://docs.mongodb.com/manual/reference/sql-aggregation-comparison/) |
+
+                        collection可以设定大小限制，设定后相当于环，超过大小旧的被覆盖
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                #### 数据名词区分
+
+                |              | MongoDB | MySQL   |
+                | ------------ | ------- | ------- |
+                | 数据库服务端 | mongod  | mysqld  |
+                | 数据库客户端 | mongo   | mysql   |
+                | 复制日志     | oplog   | binlog  |
+                | 恢复用日志   | journal | redolog |
+
+                oplog本质上也是写表,写到`oplog.rs`中，用`db.oplog.rs.find()`查看，不过 表的大小有限制(capped)，会覆盖写
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                #### mongo集群
+                - 每个mongod负责数据部分分片(shard)
+                - 多个mongod组成副本集(replica set) 保持分片高可用
+                - mongos(router)相当于接入层，config server负责管理路由数据
+                ![](./assets/mongos.png) <!-- .element height="70%" width="70%" -->
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                    <!-- .element: style="font-size:80%;" -->
+                    <h4 id="-https-www-cnblogs-com-duanxz-p-10730121-html-"><a href="https://www.cnblogs.com/duanxz/p/10730121.html">分片规则</a></h4>
+                    <ul>
+                    <li>根据分片键(shard key)来划分，分片键一般是索引<ul>
+                    <li>范围，字典序</li>
+                    <li>hash，计算<code>shard key</code>的hash，然后按照hash分片<ul>
+                    <li>热点key如何解决？ 对于写入，写成大表，拆分+搬迁</li>
+                    <li>范围查询要查所有</li>
+                    </ul>
+                    </li>
+                    <li>均衡器balancer，key的数量不均衡，搬迁块保证均衡 (可指定开关，避免高峰时间段影响业务)</li>
+                    <li>分裂，区块大小超过64M(可指定大小)，拆分，<ul>
+                    <li>区块过大影响复制，容易造成热点key，并且一个chunk内文档过多是无法搬迁的</li>
+                    <li>过小，经常分裂，可能导致最后分裂的区块和本身的chunk单元一致，jumbo chunk，无法搬迁</li>
+                    <li>存储引擎要支持分裂文件接口(wiredtiger/mongorocks)</li>
+                    <li>文件是标记删除，需要定期compact</li>
+                    </ul>
+                    </li>
+                    </ul>
+                    </li>
+                    <li>如何选取shard key？<ul>
+                    <li>递增，插入总在最后，文件搬动比较少，容易写入热点</li>
+                    <li>随机，插入随机性能好，随机IO也多，范围查询要命</li>
+                    <li>混合 大范围递增，小范围随机 </li>
+                    </ul>
+                    </li>
+                    </ul>
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ```json
+                {
+                    "_id": 0, 
+                    "name": "aimee Zank", 
+                    "scores": [
+                        {
+                            "score": 1.463179736705023, 
+                            "type": "exam"
+                        }, 
+                        {
+                            "score": 11.78273309957772, 
+                            "type": "quiz"
+                        }, 
+                        {
+                            "score": 35.8740349954354, 
+                            "type": "homework"
+                        }
+                    ]
+                }
+                ```
+
+                
                 </textarea>
+                </section>
             </section>
 
-            <section data-markdown>
-                <textarea data-template>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                ### CURD Command生成
+                ```c++
+                struct MsgHeader {
+                    int32   messageLength; // total message size, including this
+                    int32   requestID;     // identifier for this message
+                    int32   responseTo;    // requestID from the original request
+                                           //   (used in responses from db)
+                    int32   opCode;        // request type - see table below for details
+                }
+                ```
+                每个opcode有具体的属性字段，所有命令抽象成command 实现run接口。根据opcode生成command
+                
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 建表
+                SQL建表
+                ```SQL
+                CREATE TABLE people (
+                    id MEDIUMINT NOT NULL AUTO_INCREMENT, 
+                    user_id Varchar(30), 
+                    age Number, 
+                    status char(1), 
+                    PRIMARY KEY (id) )
+                ```
+                对应的mongo shell 直接插入一条数据就建表
+                ```javascript
+                db.people.insertOne( {
+                    user_id: "abc123",
+                    age: 55,
+                    status: "A"
+                 } )
+                db.createCollection("people")
+                ```
+                其中，id没有显式体现出来，mongodb内置了一个_id字段
+                - [生成规则](https://docs.mongodb.com/manual/reference/method/ObjectId/): 12字节，4时间戳(秒级) + 3(机器码，随机值) + 2(进程PID)+ 3(计数器counter自增) 保证各个机器唯一,不需要指定主键之类的信息
+                
+                
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 创建索引
+
+                ```SQL
+                CREATE INDEX idx_user_id_asc ON people(user_id);
+                CREATE INDEX idx_user_id_asc_age_desc ON people(user_id, age DESC)
+                ```
+ 
+
+                ```javascript
+                db.people.createIndex( { user_id: 1 } )
+                db.people.createIndex( { user_id: 1, age: -1 } )
+                ```
+                索引的优化和调优，mysql的经验在mongodb上也是适用的，mongo也有对应的explain以及索引命中/全盘扫的概念, 优化器的行为是类似的
+                
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 业务逻辑: 写入
+                ```SQL
+                INSERT INTO people(user_id, age, status) VALUES ("bcd001", 45, "A")
+                ```
+                ```javascript
+                db.people.insertOne({ user_id: "bcd001", age: 45, status: "A" }, {writeConcern: {w: 1}})
+                ```
+                针对mongo的架构，客户端可以选择不同的`写入策略`，即[writeConcern](https://developer.aliyun.com/article/54367)
+                
+                - w: \<number> 数据写入到number个节点才向用客户端确认
+                  -  {w: 0} 对客户端的写入不需要发送任何确认，适用于性能要求高，但不关注正确性的场景
+                  -  {w: 1} 默认的writeConcern，数据写入到Primary就向客户端发送确认
+                  -  {w: "majority"} 数据写入到副本集大多数成员后向客户端发送确认，适用于对数据安全性要求比较高的场景，该选项会降低写入性能
+                
+                
 
                 </textarea>
+                </section>
+
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 业务逻辑: [写入](https://developer.aliyun.com/article/54367)
+                
+                - j: \<boolean> 写入操作的journal持久化后才向客户端确认
+                  -   默认为{j: false}，如果要求Primary写入持久化了才向客户端确认，则指定该选项为true
+                  -  设置j:true之后w:0等于失效
+                - wtimeout 超时设置，写多数不设置超时可能会阻塞住
+                ![原理](./assets/writeConcern1.jpeg)  <!-- .element height="80%" width="80%" -->
+
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 读取
+                ```SQL
+                SELECT id, user_id, status FROM people
+                ```
+
+                ```javascript
+                db.people.find(
+                    { user_id: 1, status: 1 }
+                )
+                ```
+                - 读取有两种设置，一种是readPreference 可以设定从哪里读 另一种和writeConcern对应，[readConcern](https://developer.aliyun.com/article/60553)
+                    - local 能读取任意数据，这个是默认设置
+                    - majority 只能读取到`成功写入到大多数节点的数据`
+                    - 如果主库能扛住，没必要读写分离
+
+                - 读写分离实践： 写多数，读从
+
+                ```javascript
+                // 写入时保证大多数节点写入成功
+                db.order.insert({"id": "123456789"}, {writeConern: {w: "majority"}})
+                // 读取时保证这条数据已在大多数节点存在
+                db.order.find({"id": "123456789"}).readPref("secondaryPreferred").readConcern("majority")
+                ```
+
+
+
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### `readConcern` 原理
+
+                - snapshot线程会周期性的对当前的数据集进行snapshot，并记录`snapshot `最新`oplog`的时间戳，得到一个映射表，根据`oplog`同步的状态标记`snapshot，只有大多数`snapshot都被标记成`committed`，才算有效的，才能被读到
+                - 注意，读到不代表是最新的
+
+                | 最新oplog时间戳 | snapshot | 状态  |
+                | ------- | --------- | ----------- |
+                | t0   | snapshot0 | committed   |
+                | t1   | snapshot1 | uncommitted |
+                | t2   | snapshot2 | uncommitted |
+                | t3   | snapshot3 | uncommitted |
+                
+
+
+                </textarea>
+                </section>
+
             </section>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                ### [副本集选举](https://cloud.tencent.com/developer/article/1713032?from=10680)
+                - 基本上是raft的改写，raft-like算法pv1
+                  - 如何避免脑裂？选举超时自动退位
+                  - 加了pre-vote防止term跳变
+                     
+                </textarea>
+                </section>
 
-            <section data-markdown>
-                <textarea data-template>
+                <section data-markdown>
+                    <textarea data-template>
+                ### 数据复制
+                - 4.4以前: [Secondary节点拉取 oplog](https://cloud.tencent.com/developer/article/1713085)
+                - 4.4版本，开始支持streaming replication，变成主动推oplog
+                ![](./assets/rep1.png) <!-- .element height="30%" width=30%" -->
+                </textarea>
+                </section>
+
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 数据复制: 推还是拉
+                - 4.4版本，开始支持streaming replication，变成主动推oplog
+                 - w:1场景下，写主库挂掉，备没来得及拉取导致的数据丢失
+                 - w:majority场景下，等待回复的延迟较高
+                 - 拉取，读备可能读到旧的数据，虽然有w:majority,但是majority不代表是最新的，主库的最最新写入还在等待同步
+                
+                </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                ### 业务逻辑: 数据迁移
+                - [balancer主动触发](https://mongoing.com/archives/3476)
+                  - 三种场景
+                    - chunks分布不均衡
+                    - shard下线
+                    - 用户指定某个key到某个chunks上
+                  - 每个mongos都有balancer，都发起迁移不就乱了
+                    - 抢锁`config.locks`集合下的一个特殊文档，`Balancer`使用`findAndModify`命令去更新文档的`stat`e字段, 更新成功=抢锁成功
+                  - 流程: mongos去config server上抢锁 -> 成功后去获取分片的数据信息，判断是否需要清理/分裂等等 ->看看是否满足分片不均衡的条件，差值>某个值就开始迁移 -> 迁移结束更新数据 -> 通知客户端，路由版本变动，重新拉取
+                - [用户在router(mongos)上发起movechunk命令](https://mongoing.com/archives/3490)
+                  - 原理类似
+                </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                ### 业务逻辑: 事务
+                这个一时半会说不完
 
                 </textarea>
+                </section>
+
             </section>
 
             <section data-markdown>
@@ -60,7 +366,13 @@
                 - mongo分析 文档 https://blog.csdn.net/baijiwei/article/details/78070355
                 - 
                 Architecture of a Database System(中文版) http://dblab.xmu.edu.cn/wp-content/uploads/old/files/linziyu-Architecture%20of%20a%20Database%20System(Chinese%20Version)-ALL.pdf
-                
+                - mongo复制原理 https://mongoing.com/archives/5200
+                - mongo事务分析 https://mongoing.com/%3Fp%3D6084
+                - mongo vs mysql 写确认 https://cloud.tencent.com/developer/article/1624124
+                - mongodb 复制技术内幕 https://mongoing.com/archives/72571
+                - mongodb迁移 https://mongoing.com/archives/3476
+                - raft 解决脑裂问题 region lease 这意思差不多就是选举时间内没达成意见主动降低 https://www.jianshu.com/p/072380e12657
+                - mongo事务和复制 https://zhuanlan.zhihu.com/p/54410171
                 </textarea>
             </section>
         </div>
