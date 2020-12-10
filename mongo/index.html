@@ -13,12 +13,12 @@
 
     <title>reveal.js</title>
 
-    <link rel="stylesheet" href="reveal.js/dist/reset.css">
-    <link rel="stylesheet" href="reveal.js/dist/reveal.css">
-    <link rel="stylesheet" href="assets/white.css" id="theme">
+    <link rel="stylesheet" href="../reveal.js/dist/reset.css">
+    <link rel="stylesheet" href="../reveal.js/dist/reveal.css">
+    <link rel="stylesheet" href="../assets/white.css" id="theme">
 
     <!-- Theme used for syntax highlighted code -->
-    <link rel="stylesheet" href="reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
+    <link rel="stylesheet" href="../reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
 </head>
 
 <body>
@@ -38,7 +38,7 @@
                 ##### 一个典型的关系型数据库的架构
                 - 对于mongo而言，大部分概念都是换了个名字，但是mongo在分布式的场景下，引入了一些概念
 
-                ![](./assets/main_components_of_a_dbms.png) <!-- .element height="60%" width="60%" -->
+                ![](../assets/main_components_of_a_dbms.png) <!-- .element height="60%" width="60%" -->
                 
                     </textarea>
                 </section>
@@ -81,7 +81,7 @@
                 - 每个mongod负责数据部分分片(shard)
                 - 多个mongod组成副本集(replica set) 保持分片高可用
                 - mongos(router)相当于接入层，config server负责管理路由数据
-                ![](./assets/mongos.png) <!-- .element height="70%" width="70%" -->
+                ![](../assets/mongos.png) <!-- .element height="70%" width="70%" -->
                     </textarea>
                 </section>
                 <section data-markdown>
@@ -239,7 +239,7 @@
                   -   默认为{j: false}，如果要求Primary写入持久化了才向客户端确认，则指定该选项为true
                   -  设置j:true之后w:0等于失效
                 - wtimeout 超时设置，写多数不设置超时可能会阻塞住
-                ![原理](./assets/writeConcern1.jpeg)  <!-- .element height="80%" width="80%" -->
+                ![原理](../assets/writeConcern1.jpeg)  <!-- .element height="80%" width="80%" -->
 
                 </textarea>
                 </section>
@@ -311,7 +311,7 @@
                 ### 数据复制
                 - 4.4以前: [Secondary节点拉取 oplog](https://cloud.tencent.com/developer/article/1713085)
                 - 4.4版本，开始支持streaming replication，变成主动推oplog
-                ![](./assets/rep1.png) <!-- .element height="30%" width=30%" -->
+                ![](../assets/rep1.png) <!-- .element height="30%" width=30%" -->
                 </textarea>
                 </section>
 
@@ -382,10 +382,10 @@
     ​ </div>
     ​ </div>
 
-    <script src="reveal.js/dist/reveal.js"></script>
-    <script src="reveal.js/plugin/notes/notes.js"></script>
-    <script src="reveal.js/plugin/markdown/markdown.js"></script>
-    <script src="reveal.js/plugin/highlight/highlight.js"></script>
+    <script src="../reveal.js/dist/reveal.js"></script>
+    <script src="../reveal.js/plugin/notes/notes.js"></script>
+    <script src="../reveal.js/plugin/markdown/markdown.js"></script>
+    <script src="../reveal.js/plugin/highlight/highlight.js"></script>
     <script>
         // More info about initialization & config:
         // - https://revealjs.com/initialization/
