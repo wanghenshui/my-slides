@@ -26,13 +26,13 @@
         <div class="slides">
             <section data-markdown>
                 <textarea data-template>
-                    - Microsoft Faster KV引擎 介绍
-                        - 架构
-                        - 业务逻辑/原理
-                        - 并发冲突处理
-                        - 备份
-                        - Compaction相关设计
-                        - 内部优化
+                    ## Microsoft Faster KV引擎 介绍
+                    - 架构
+                    - 业务逻辑/原理
+                    - 并发冲突处理
+                    - 备份
+                    - Compaction相关设计
+                    - 内部优化
   			    </textarea>
             </section>
             <section>
@@ -41,13 +41,14 @@
                         <!-- .element: style="font-size:80%;" -->
                         - 核心就是无锁hashtable + log文件
                         ![](https://wanghenshui.github.io/assets/fasterkv0.png)
-                        - hashtable的所有key都是64字节对齐，抵消 false-sharing影响
+                        - 使用背景， 点读，in-place更新，热数据在内存，冷数据定期删除/存到azure云
                     </textarea>
                 </section>
 
                 <section data-markdown>
                     <textarea data-template>
                         <!-- .element: style="font-size:75%;" -->
+                        - hashtable的所有key都是64字节对齐，抵消 false-sharing影响
                         - hashtable 核心：无锁 原子操作，hashtable 的value是int64，可以CAS
                         - 每个key算出hash定位到具体的位置，并且将一部分hash存在tag中。hashtable是索引，具体的key value打包在一起放到Hybird log中
                         - 乍一看有点像mmap，不过是无锁
@@ -89,6 +90,7 @@
                     </textarea>
                 </section>
 
+
                 <section data-markdown>
                     <textarea data-template>
                         <!-- .element: style="font-size:75%;" -->
@@ -101,6 +103,13 @@
                     </textarea>
                 </section>
 
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ### 存在的问题
+                        - 需要定期checkpoint，不然遇到崩溃，距离上次快照的所有hash index都会丢失
+                    </textarea>
+                </section>
             </section>
 
 
@@ -168,9 +177,19 @@
                         - compact涉及到的方案设计
                             - 社区方案的compact是重新写一个新的，旧的释放，改成多线程任务队列扫描写
                             - 统计Hlog空洞率，根据空洞率进行compact
+                            - compaction filter，自定义过滤策略
                             - 可以指定compact的策略，全部compact还是从旧到新逐个文件根据空洞率从高到低来compact
                                 - 比如整体空洞率50%，那最后一个文件可能空洞率要超过70%，才有compact的价值，compact一半文件，保证能减少整体文件的体积
                             - 和rocksdb类似，compact就是另一种写，所以要限制compact速度，引入rate limiter
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ### 存在的问题
+                        - 开销很大，小key大量新数据可能需要很多compact，性价比低
+                        - compact如果崩溃，可能就会有数据不一致的问题，数据删了，却没有落地
                     </textarea>
                 </section>
 
@@ -194,12 +213,34 @@
                 </section>
 
             </section>
-            
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ### 性能数据
+                        ![image-20220119165714574](https://wanghenshui.github.io/assets/image-20220119165714574.png)
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ### 实际数据？？
+                    </textarea>
+                </section>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                    # Q/A
+                </textarea>
+            </section>
+        
             <section data-markdown>
                 <textarea data-template>
                     <!-- .element: style="font-size:75%;" -->
                     - 参考资料
                         - https://github.com/microsoft/FASTER
+                        - https://www.microsoft.com/en-us/research/uploads/prod/2018/03/faster-sigmod18.pdf
                         - https://zhuanlan.zhihu.com/p/111130238
                         - https://www.zhihu.com/question/291185867
                         - https://nan01ab.github.io/2019/05/FASTER.html
