@@ -1,0 +1,296 @@
+<!doctype html>
+
+<html>
+<head>
+
+    <title>Pelikan cache 原理介绍</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>reveal.js</title>
+
+    <link rel="stylesheet" href="../reveal.js/dist/reset.css">
+    <link rel="stylesheet" href="../reveal.js/dist/reveal.css">
+    <link rel="stylesheet" href="../assets/white.css" id="theme">
+
+    <!-- Theme used for syntax highlighted code -->
+    <link rel="stylesheet" href="../reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
+</head>
+
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <section data-markdown>
+                <textarea data-template>
+                    # Pelikan
+                    - 背景/动机
+                    - 架构/设计
+                    - 在新的技术方向的探索
+                        - 英特尔网卡/dpdk
+                        - pmem傲腾设备
+                        - segcache
+  			    </textarea>
+            </section>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:80%;" -->
+                        ## 背景
+                        - 大量使用redis和twememcache(memcache推特维护版本)
+                        - 小对象，大量长连接，大量简单数据交互。延迟敏感
+                        - 在使用cache期间，总会周期性的有延迟尖刺
+                            - 尽可能的降低延迟以及延迟尖刺
+                                - 降低syscall，一个connection要四个syscall。大量的连接 断开/接入会有影响，使用连接池
+                            - 程序的log写入是block IO，也会产生延迟
+                                - 把log改成消费队列模型
+                        
+                        ![](../assets/pelikan_conn_syscall.png) <!-- .element height="70%" width="70%" -->
+
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:80%;" -->
+                        ## 背景
+                        - memcache rehash 会锁entry，产生巨大延迟，且每次rehash都是翻倍的，重写维护版memcache，改成无锁
+
+                        ![](../assets/pelikan_locks.png) <!-- .element height="70%" width="70%" -->
+
+                        - 长期使用内存碎片太多，linux分配不出连续内存转而OOM杀掉memcache/redis，造成连锁反应升高延迟
+                            - 外部malloc意义不大。碎片还是存在。需要收敛到内部管理
+
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:80%;" -->
+                        ![](../assets/pelikan-perf.png) <!-- .element height="100%" width="100%" -->
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 背景 仍存在的问题
+                        - 协议不灵活，很多业务接入可能只需要个rpc
+                        - 池化/预分配能力差，很容易因为陌生流量/内存占用提高延迟
+                        - 小对象，metadata浪费，memcache一条数据浪费49B，redis浪费也很多。twitter都是小对象场景，浪费非常多
+                        - 线程公用问题，比如状态上报和清理断开连接都用的同一个线程，可能有不可预测的延迟影响(syscall)
+                        - 漏洞/危险命令
+                        - 代码复用较差，开源社区代码不好改
+                        - redis的问题
+                            - 用jemalloc并不能解决内存碎片问题，能改善，不能解决
+                            - 一个线程干连接/命令处理 的活  (5.0之后有改善) 大量连接有延迟影响
+                            - 需要更多的适配维护/patch
+                            - 协议扩展很麻烦
+                            - log/stats支持很差，性能也很差
+                            - 内存问题导致OOM，expire不可预测影响延迟
+                        - memcache问题
+                            - 协议笨拙，无法表达复杂类型，数据模型简单，无法描述twitter业务场景
+                            - 多线程的锁影响线能。竞争造成延迟突刺
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 背景 twitter业务场景
+                        ![](../assets/pelikan-use-case.png) <!-- .element height="80%" width="80%" -->
+
+                        目标：节省store，且保持高性能
+                    </textarea>
+                </section>
+                <section data-markdown>pelican-use-case
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 背景 twitter业务数据
+                        ![](../assets/pelikan-obj-size.png) <!-- .element height="80%" width="80%" -->
+                        
+                        可以kv分离降低metadata大小来节省空间
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 背景 twitter业务数据
+                        ![](../assets/pelikan-obj-size2.png) <!-- .element height="80%" width="80%" -->
+                        
+                        value可以用上压缩算法
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 背景 twitter业务数据
+                        ![](../assets/pelikan-obj-size3.png) <!-- .element height="80%" width="80%" -->
+                        
+                        访问有规律，分配器可以定死，降低碎片
+                    </textarea>
+                </section>
+            </section>
+
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 设计实现
+                        - 在之前已有的优化上，拆分线程和任务
+                        - 引入数据面/控制面概念，更好的管理
+                        - 写入的延迟是不能保证的(系统fsync)，所以要控制写相关，使其稳定
+                        - 锁竞争在大量请求场景下造成的上下文切换不可接受，必须去掉
+                        - 系统调用浪费太多时间，能省就省
+                            - 每次request-response都有个读写，如果能batch/pipeline就能省一些
+                            - 主干路径不要互相影响，读写/admin拆分开
+                            - 去掉可能影响阻塞的部分，包括写阻塞改成消费队列，锁阻塞直接去掉锁，系统调用尽可能减少，malloc延迟用内置内配器替换
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 架构
+                        ![](../assets/pelikan-arch.png) <!-- .element height="80%" width="80%" -->
+
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 设计：内存优化
+                        ![](../assets/pelikan-design1.png) <!-- .element height="50%" width="80%" -->
+
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 设计：节省存储，引入TTL
+                        ![](../assets/pelikan-ttl.png) <!-- .element height="80%" width="80%" -->
+
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 设计：降低写入延迟，批量写入，引入pmem
+                        ![](../assets/pelikan-write-heavy.png) <!-- .element height="80%" width="80%" -->
+
+                    </textarea>
+                </section>
+            </section>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 在PMEM上的探索
+                        ![](../assets/pelikan-pmem1.png)
+                    </textarea>
+                </section>
+            </section>
+
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## Segcache 背景 
+                        ![](../assets/pelikan-segcache-mov.png)
+                        - 寻找内存利用率高扩展能力强的cache
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## Segcache
+                        ![](../assets/pelikan-segcache-deg2.png)
+                        - hashtable是无锁的八个一组，第一个是这组bucket的信息，剩余的七个用来存实际的key meta 
+                        - segment可以理解成追加写的文件，每个文件有文件头用来描述这个segment信息。整体按照TTL来排序。GC/evict也以segment为单位来淘汰
+                        - TTL也可以让数据规模更稳定，节省资源
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## Segcache TTL背景
+                        ![](../assets/pelikan-ttl-sol.png)
+                        已有的TTL设计大都需要扫描，非常笨拙
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## Segcache TTL设计
+                        ![](../assets/pelikan-ttl-deg.png)
+                        LRU + hashtable的结合体
+                    </textarea>
+                </section>
+            </section>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 性能数据 内存利用率
+                        ![](../assets/pelikan-eval1.png)
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 性能数据 水平扩展和吞吐
+                        ![](../assets/pelikan-eval2.png)
+                    </textarea>
+                </section>
+            </section>
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        ## Q/A
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        ## 参考资料
+
+                        - [In-Memory Caching: Curb Tail Latency with Pelikan](https://www.youtube.com/watch?v=QH1jr8Y1FTQ&t=2091s)
+                        - https://twitter.github.io/pelikan/2019/why-pelikan.html
+                        - http://twitter.github.io/pelikan/2016/separation-concerns.html
+                        - https://twitter.github.io/pelikan/2020/benchmark-adq.html
+                        - [Using Persistent Memory with Pelikan](https://www.youtube.com/watch?v=leaIWRk_2bY)
+                        - [SDC2020: Caching on PMEM: an Iterative Approach](https://www.youtube.com/watch?v=lTiw4ehHAP4)
+                        - [OSDI '20 - A large scale analysis of hundreds of in-memory cache clusters at Twitter](https://www.youtube.com/watch?v=OQtMM5vdhlI)
+                        - [NSDI '21 - Segcache: a memory-efficient and scalable in-memory key-value cache for small objects](https://www.youtube.com/watch?v=s7YtO0rk9WM&t=313s)
+                    </textarea>
+                </section>
+            </section>
+        </div>
+    </div>
+
+
+    <script src="../reveal.js/dist/reveal.js"></script>
+    <script src="../reveal.js/plugin/notes/notes.js"></script>
+    <script src="../reveal.js/plugin/markdown/markdown.js"></script>
+    <script src="../reveal.js/plugin/highlight/highlight.js"></script>
+    <script>
+        // More info about initialization & config:
+        // - https://revealjs.com/initialization/
+        // - https://revealjs.com/config/
+        Reveal.initialize({
+            hash: true,
+
+            // Learn about plugins: https://revealjs.com/plugins/
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+        });
+        
+    </script>
+</body>
+
+</html>
