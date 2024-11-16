@@ -1,0 +1,316 @@
+<!doctype html>
+
+<html>
+<head>
+
+    <title>C++中文周刊周末圆桌讨论 1118</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>reveal.js</title>
+
+    <link rel="stylesheet" href="../reveal.js/dist/reset.css">
+    <link rel="stylesheet" href="../reveal.js/dist/reveal.css">
+    <link rel="stylesheet" href="../assets/white.css" id="theme">
+
+    <!-- Theme used for syntax highlighted code -->
+    <link rel="stylesheet" href="../reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
+</head>
+
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <section data-markdown>
+                <textarea data-template>
+                    ## C++中文周刊周末圆桌讨论
+                    #### 第一期，争取有第二期
+                    - 周刊内容鉴赏，抽取几个例子
+                    - German String
+                    - 代码鉴赏
+                    - 互动环节
+                      - c++喜剧人
+                      - QA
+
+  			    </textarea>
+            </section>
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:80%;" -->
+                        ## 周刊内容鉴赏之UB鉴赏
+                        ```C++
+                        const int N = 10;
+                        int main() {
+                        int decade[N];
+                        for (int k = 0; k <= N; ++k) {
+                            printf("k is %d\n",k);
+                            decade[k] = -1;
+                        }
+                        }
+                        ```
+
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 周刊内容鉴赏之UB鉴赏
+                        ```C++
+                        const int N = 10;
+                        int elements[N];
+                        
+                        bool contains(int x) {
+                          for (int i = 0; i <= N; ++i) {
+                            if (x == elements[i]) {
+                              return true;
+                            }
+                          }
+                          return false;
+                        }
+                        
+                        int main() {
+                          for (int i = 0; i < N; ++i) {
+                            std::cin >> elements[i];
+                          }
+                          return contains(5);
+                        }
+                        ```
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 周刊内容鉴赏之UB鉴赏
+                        ```C++
+#include <iostream>
+     
+int fermat () {
+    const int MAX = 100;
+    int a=1,b=1,c=1;
+    int iter = 0;
+    while (1) {
+        if ( (a*a*a) == (b*b*b) + (c*c*c) ) {
+            std::cout << "Found!\n";
+            return 1;
+        }
+        a++;
+        if (a>MAX) {
+            a=1;
+            b++;
+        }
+        if (b>MAX) {
+            b=1;
+            c++;
+        }
+        if (c>MAX) {
+            c=1;
+        }
+        ++iter;
+    }
+    return 0;
+}
+
+int main () {
+    if (fermat()) {
+        std::cout << "Fermat's Last Theorem has been disproved.\n";
+    } else {
+        std::cout << "Fermat's Last Theorem has not been disproved.\n";
+    }
+    return 0;
+}
+```
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 周刊内容鉴赏之UB鉴赏 栈溢出
+                        ```C++
+                        struct Node {
+                            int value = 0;
+                            std::vector<Node> childrens;
+                        };
+                        
+                        struct List {
+                            int value = 0;
+                            std::unique_ptr<List> next;
+                        
+                            ~List() {
+                                while (next) {
+                                    // The destructor is still recursive,
+                                    // but now the recursion depth is 1 call.
+                                    next = std::move(next->next);
+                                }
+                            }
+                        
+                            List() noexcept = default;
+                            List(List&&) noexcept = default;
+                            List& operator=(List&&) noexcept = default;
+                        };
+                        ```
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 周刊内容鉴赏-总结
+                        - 注意边界，尽量不要操作边界
+                            - range loop range span view等等
+                        - sanitize
+                    </textarea>
+                </section>
+
+
+            </section>
+
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## German String
+                        - 背景 字符串基本上不可变
+                        - umbra论文的来的，主要是为了小字符串 12B 做优化，另外也有prefix比较优势
+                        - 结构 from arrow
+                        ```txt
+                        * Short strings, length <= 12
+                        | Bytes 0-3  | Bytes 4-15                            |
+                        |------------|---------------------------------------|
+                        | length     | data (padded with 0)                  |
+
+                        * Long strings, length > 12
+                        | Bytes 0-3  | Bytes 4-7  | Bytes 8-11 | Bytes 12-15 |
+                        |------------|------------|------------|-------------|
+                        ···
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 常规设计
+                        ```txt
+                        * Short strings, length <= 12
+                        | Bytes 0-3  | Bytes 4-15                            |
+                        |------------|---------------------------------------|
+                        | length     | data (padded with 0)                  |
+
+                        * Long strings, length > 12
+                        | Bytes 0-3  | Bytes 4-7  | Bytes 8-15 |
+                        |------------|------------|------------|
+                        | length     | prefix     |  ptr     |
+                        ```
+                        符合使用直觉
+
+                        ```c++
+                        bool isEqual(data128_t a, data128_t b) {
+                            if (a.v[0] != b.v[0]) return false;
+                            auto len = (uint32_t) a.v[0];
+                            if (len <= 12) return a.v[1] == b.v[1];
+                            return memcmp((char*) a.v[1], (char*) b.v[1], len) == 0;
+                        }
+                        ```
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 应用？
+                        - arrow之类的AP计算场景
+                        - 普通优化也可以用 
+                            - ["German string" optimizations in Spellbook.](https://the-mikedavis.github.io/posts/german-string-optimizations-in-spellbook/)
+                        - 有时间可以测一下
+                    </textarea>
+                </section>
+
+ 
+            </section>
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 代码鉴赏环节
+                        - https://github.com/apache/kvrocks/pull/2648
+                        ```diff
+                         is_txn_mode_ = true;
+                        - txn_write_batch_ =
+                        -    std::make_unique<rocksdb::WriteBatchWithIndex>(rocksdb::BytewiseComparator() /*default backup_index_comparator */,
+                        -                                                   0 /* default reserved_bytes*/, GetWriteBatchMaxBytes());
+                        + // Set overwrite_key to false to avoid overwriting the existing key in case
+                        + // like downstream would parse the replication log etc.
+                        + txn_write_batch_ = std::make_unique<rocksdb::WriteBatchWithIndex>(
+                        +    /*backup_index_comparator=*/rocksdb::BytewiseComparator(),
+                        +    /*reserved_bytes=*/0, /*overwrite_key=*/false, /*max_bytes=*/GetWriteBatchMaxBytes());
+                        + return Status::OK();
+  
+                        ```
+                        ```C++
+                        explicit WriteBatchWithIndex(
+                            const Comparator* backup_index_comparator = BytewiseComparator(),
+                            size_t reserved_bytes = 0, bool overwrite_key = false,
+                            size_t max_bytes = 0, size_t protection_bytes_per_key = 0);
+                        ```
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ### param hell/ boolean hell
+                        - 不如option结构体
+                    </textarea>
+                </section>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:75%;" -->
+                    # C++喜剧人分享环节
+                </textarea>
+            </section>
+
+            <section>
+                <h1 >Q/A</h1>
+            </section>
+
+
+        
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:75%;" -->
+                    ## 参考资料
+
+                </textarea>
+            </section>
+        </div>
+    </div>
+
+
+    ​ </div>
+    ​ </div>
+
+    <script src="../reveal.js/dist/reveal.js"></script>
+    <script src="../reveal.js/plugin/notes/notes.js"></script>
+    <script src="../reveal.js/plugin/markdown/markdown.js"></script>
+    <script src="../reveal.js/plugin/highlight/highlight.js"></script>
+    <script>
+        // More info about initialization & config:
+        // - https://revealjs.com/initialization/
+        // - https://revealjs.com/config/
+        Reveal.initialize({
+            hash: true,
+
+            // Learn about plugins: https://revealjs.com/plugins/
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+        });
+        
+    </script>
+</body>
+
+</html>
