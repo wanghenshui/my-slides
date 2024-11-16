@@ -6,4 +6,9 @@ just some simple  sides i made
 
 [faster](https://wanghenshui.github.io/my-slides/faster)  [pdf](https://wanghenshui.github.io/my-slides/faster/?print-pdf)
 
+[why choose faster](https://wanghenshui.github.io/my-slides/why-choose-faster)  [pdf](https://wanghenshui.github.io/my-slides/why-choose-faster/?print-pdf)
+
 [pelikan](https://wanghenshui.github.io/my-slides/pelikan)  [pdf](https://wanghenshui.github.io/my-slides/pelikan/?print-pdf)
+
+
+[c++ weeklynews cn talk week1](https://wanghenshui.github.io/my-slides/week1)  [pdf](https://wanghenshui.github.io/my-slides/week1/?print-pdf)
