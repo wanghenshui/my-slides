@@ -12,3 +12,4 @@ just some simple  sides i made
 
 
 [c++ weeklynews cn talk week1](https://wanghenshui.github.io/my-slides/week1)  [pdf](https://wanghenshui.github.io/my-slides/week1/?print-pdf)
+[c++ weeklynews cn talk week2](https://wanghenshui.github.io/my-slides/week2)  [pdf](https://wanghenshui.github.io/my-slides/week2/?print-pdf)

@@ -1,0 +1,325 @@
+<!doctype html>
+
+<html>
+<head>
+
+    <title>C++中文周刊周末圆桌讨论 1124</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>reveal.js</title>
+
+    <link rel="stylesheet" href="../reveal.js/dist/reset.css">
+    <link rel="stylesheet" href="../reveal.js/dist/reveal.css">
+    <link rel="stylesheet" href="../assets/white.css" id="theme">
+
+    <!-- Theme used for syntax highlighted code -->
+    <link rel="stylesheet" href="../reveal.js/plugin/highlight/monokai.css" id="highlight-theme">
+</head>
+
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <section data-markdown>
+                <textarea data-template>
+                    ## C++中文周刊周末圆桌讨论
+                    #### 第二期，争取有第三期
+                    - 代码鉴赏
+                    - 安全/hardening mode
+                    - std::any
+                    - 互动环节
+                      - c++喜剧人
+                      - QA
+                    #### 等歌结束就开始
+                    #### 检查直播间和腾讯会议麦克风 是否有声音，没声扣1
+  			    </textarea>
+            </section>
+            <section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 代码鉴赏
+                        ```c++
+                        #include <memory>
+                        #include <xmmintrin.h>
+                        #include <type_traits>
+                        
+                        
+                        const size_t head = 0;
+                        std::aligned_union<256, __m128i> storage;
+                        int main() {
+                            __m128i* a = new (&storage) __m128i();
+                            __m128i* b = new ((char*)(&storage) + 0) __m128i();
+                            __m128i* c = new ((char*)&storage + head) __m128i();
+                        }
+                        ```
+                    </textarea>
+                </section>
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+ ```diff
+ // To replace std::aligned_storage...
+ template <typename T>
+ class MyContainer {
+    // [...]
+    private:
+-    std::aligned_storage_t<sizeof(T), alignof(T)> t_buff;
++    alignas(T) std::byte t_buff[sizeof(T)];
+    // [...]
+ };
+
+ // To replace std::aligned_union...
+ template <typename... Ts>
+ class MyContainer {
+    // [...]
+    private:
+-    std::aligned_union_t<0, Ts...> t_buff;
++    alignas(Ts...) std::byte t_buff[std::max({sizeof(Ts)...})];
+    // [...]
+ };
+```
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 代码鉴赏 string_view和char *混用
+                        ```C++
+                            #include  <iostream>
+                            #include <string_view>
+                            void print_me(std::string_view s) {
+                                printf("%s\n", s.data());
+                            }
+                            
+                            int main() {
+                              char next[] = {'n','e','x','t'};
+                              char hello[] = {'H','e','l','l','o', ' ',
+                                              'W','o','r','l','d'};
+                              std::string_view sub(hello, 5);
+                              std::cout << sub << "\n";
+                              print_me(sub);
+                            }
+                        ```
+                        - 表面不炸没准哪天就炸了
+                        - 记得facebook有个类似的问题，想不起来出处了
+                        - sanitize能抓到
+                        - 注意转换问题，string string_view char * char[] vector u8
+                    </textarea>
+                </section>
+
+
+            </section>
+
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 安全
+                        - 过去 debug/fority _s 等各种“安全” 加固 什么各种安全公司定制lib
+                            - 安全公司不好过了最近
+                        - 现在
+                            - hardening mode
+                            - contract
+
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## [hardening mode](https://libcxx.llvm.org/Hardening.html)
+                        - [设计文档](https://discourse.llvm.org/t/rfc-hardening-in-libc/73925)
+                        - 已有实践 [google](https://security.googleblog.com/2024/11/retrofitting-spatial-safety-to-hundreds.html) 性能下降1%
+                            - 他们测试数据性能影响不到1%，非常可观
+                            - 加固只有1% 3%性能损失？
+                        > While these new runtime safety checks improve security, they add additional runtime overhead and can negatively impact performance. 
+                        > We studied the performance degradation for Google workloads and Feedback Direct Optimization (FDO) proved to be effective in minimizing it. 
+                        > As an example, enabling the hardened libc++, without any FDO, 
+                        > in a representative Google fleet workload added a ~0.9% queries per second (QPS) regression and a ~2.5% latency regression. 
+                        > When properly using FDO, we measured a ~65% reduction in QPS overhead and a ~75% reduction in latency overhead.
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 如何使用
+                        - 链接libc++
+                        ```bash
+                        -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE
+                        -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST
+                        -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE
+                        -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG
+                        ```
+                        - 一般用FAST或者EXTENSIVE，功能看名字就能看得出
+                        - 违反直接挂掉，最小化影响（灰度发现问题）
+                        - 默认不影响ABI，可以进一步加大级别
+                        - 差异请看下一页
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+
+                        | Category name 分类名称        | `fast` | `extensive` | `debug` |
+                        | ------------------------------------ | --------- | ----------------- | -------- |
+                        | `valid-element-access`    | ✅                                  | ✅                                       | ✅                                   |
+                        | `valid-input-range`       | ✅                                  | ✅                                       | ✅                                   |
+                        | `non-null`                | ❌                                  | ✅                                       | ✅                                   |
+                        | `non-overlapping-ranges`  | ❌                                  | ✅                                       | ✅                                   |
+                        | `valid-deallocation`      | ❌                                  | ✅                                       | ✅                                   |
+                        | `valid-external-api-call` | ❌                                  | ✅                                       | ✅                                   |
+                        | `compatible-allocator`    | ❌                                  | ✅                                       | ✅                                   |
+                        | `argument-within-domain`  | ❌                                  | ✅                                       | ✅                                   |
+                        | `pedantic`                | ❌                                  | ✅                                       | ✅                                   |
+                        | `semantic-requirement`    | ❌                                  | ❌                                       | ✅                                   |
+                        | `internal`                | ❌                                  | ❌                                       | ✅                                   |
+                        | `uncategorized`           | ❌                                  | ✅                                       | ✅                                   |
+                        
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## harden mode ABI 额外限制
+                        - _LIBCPP_ABI_BOUNDED_ITERATORS  抓迭代器越界 span/string_view
+                        - _LIBCPP_ABI_BOUNDED_ITERATORS_IN_VECTOR  抓vector迭代器越界 除了vector bool 
+                        - _LIBCPP_ABI_BOUNDED_ITERATORS_IN_STD_ARRAY 类似上条
+                        - _LIBCPP_ABI_BOUNDED_UNIQUE_PTR 抓unique ptr数组越界 破坏布局注意
+                        - 容器总结下一页
+                        
+                        
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        | Name 姓名                                        | Member functions 成员函数 | Iterators (ABI-dependent)迭代器（与 ABI 相关） |
+                        | --------------------------------------------------- | ---------------------------- | ------------------------------------------------ |
+                        | `span`               | ✅                         | ✅                                             |
+                        | `string_view`        | ✅                         | ✅                                             |
+                        | `array`              | ✅                         | ❌                                             |
+                        | `vector`             | ✅                         | ✅ (see note) ✅（参见备注）                  |
+                        | `string`             | ✅                         | ✅ (see note) ✅（参见备注）                  |
+                        | `list`               | ✅                         | ❌                                             |
+                        | `forward_list`       | ❌                         | ❌                                             |
+                        | `deque`              | ✅                         | ❌                                             |
+                        | `map`                | ❌                         | ❌                                             |
+                        | `set`                | ❌                         | ❌                                             |
+                        | `multimap`           | ❌                         | ❌                                             |
+                        | `multiset`           | ❌                         | ❌                                             |
+                        | `unordered_map`      | Partial 部分              | Partial 部分                                  |
+                        | `unordered_set`      | Partial 部分              | Partial 部分                                  |
+                        | `unordered_multimap` | Partial 部分              | Partial 部分                                  |
+                        | `unordered_multiset` | Partial 部分              | Partial 部分                                  |
+                        | `mdspan`             | ✅                         | ❌                                             |
+                        | `optional`           | ✅                         | N/A /无/                                      |
+                        | `function`           | ❌                         | N/A /无/                                      |
+                        | `variant`            | N/A /无/                  | N/A /无/                                      |
+                        | `any`                | N/A /无/                  | N/A /无/                                      |
+                        | `expected`           | ✅                         | N/A /无/                                      |
+                        | `valarray`           | Partial 部分              | N/A .无可用信息                               |
+                        | `bitset`             | ❌                         | N/A /无/                                      |
+                        
+                        
+                    </textarea>
+                </section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## 其他？
+                        - gcc也在跟进，当然切换libc++是最简单的方法
+                        - msvc 本身的 debug模式是ABI break的，但是实现的能力类似hardening 只不过性能有差异
+                            - msvc需要做的只是把debug模式下的检查拆分的更细一些把轻量的拆出来改名叫hardening就行了
+                        - contract实装落地之前hardening是替代方案 大厂正在主动拥护
+                        - 与contract对应的profile策略限定模式，其实有点像hardening模式的换一种说法，当然等他们吵架的空隙先用hardening即可
+                        - 同样 sanitize=address过重，也可以换用gwp 实现。直接链接compile-rt用上，clickhouse实践影响很低
+                        - 实装上述工具是杂活，没KPI大概率是懒得搞的
+
+                    </textarea>
+                </section>
+            </section>
+
+            <section>
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        ## std::any 
+                        - 实现
+                        - typeid 以及type map
+                        - 性能差异来源？
+
+                    </textarea>
+                </section>
+
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:75%;" -->
+                    # C++喜剧人分享环节
+                    #### idea来自Caskaydia
+                    #### 业务/工程/算法相关有意思的点
+                    #### 重点在于分享，不要不好意思
+                </textarea>
+            </section>
+
+
+                <section data-markdown>
+                    <textarea data-template>
+                        <!-- .element: style="font-size:75%;" -->
+                        # Q/A
+
+                        #### ![](https://wanghenshui.github.io/cppweeklynews/assets/code.png)
+
+                        - 交流群号 753792291 866408334 729240657
+                        - https://wanghenshui.github.io/cppweeklynews/
+                        - https://www.zhihu.com/collection/740473368
+                        #### ![](https://wanghenshui.github.io/assets/wepay.png)
+                    </textarea>
+                </section>
+
+
+
+
+        
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:75%;" -->
+                    ## 参考资料
+
+                </textarea>
+            </section>
+        </div>
+    </div>
+
+
+    ​ </div>
+    ​ </div>
+
+    <script src="../reveal.js/dist/reveal.js"></script>
+    <script src="../reveal.js/plugin/notes/notes.js"></script>
+    <script src="../reveal.js/plugin/markdown/markdown.js"></script>
+    <script src="../reveal.js/plugin/highlight/highlight.js"></script>
+    <script>
+        // More info about initialization & config:
+        // - https://revealjs.com/initialization/
+        // - https://revealjs.com/config/
+        Reveal.initialize({
+            hash: true,
+
+            // Learn about plugins: https://revealjs.com/plugins/
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+        });
+        
+    </script>
+</body>
+
+</html>
