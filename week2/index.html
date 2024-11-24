@@ -31,10 +31,8 @@
                     #### 第二期，争取有第三期
                     - 代码鉴赏
                     - 安全/hardening mode
-                    - std::any
-                    - 互动环节
-                      - c++喜剧人
-                      - QA
+                    - c++喜剧人
+                    - QA
                     #### 等歌结束就开始
                     #### 检查直播间和腾讯会议麦克风 是否有声音，没声扣1
   			    </textarea>
@@ -52,7 +50,7 @@
                         
                         
                         const size_t head = 0;
-                        std::aligned_union<256, __m128i> storage;
+                        std::aligned_union<256, __m128i> storage; // 看上去没问题？
                         int main() {
                             __m128i* a = new (&storage) __m128i();
                             __m128i* b = new ((char*)(&storage) + 0) __m128i();
@@ -65,7 +63,7 @@
                 <section data-markdown>
                     <textarea data-template>
                         <!-- .element: style="font-size:75%;" -->
- ```diff
+```diff
  // To replace std::aligned_storage...
  template <typename T>
  class MyContainer {
@@ -109,12 +107,12 @@
                             }
                         ```
                         - 表面不炸没准哪天就炸了
-                        - 记得facebook有个类似的问题，想不起来出处了
+                        - 记得facebook有个类似的问题， https://www.youtube.com/watch?v=kPR8h4-qZdk&t=1150s
                         - sanitize能抓到
                         - 注意转换问题，string string_view char * char[] vector u8
                     </textarea>
                 </section>
-
+            
 
             </section>
 
@@ -247,20 +245,6 @@
                 </section>
             </section>
 
-            <section>
-                <section data-markdown>
-                    <textarea data-template>
-                        <!-- .element: style="font-size:75%;" -->
-                        ## std::any 
-                        - 实现
-                        - typeid 以及type map
-                        - 性能差异来源？
-
-                    </textarea>
-                </section>
-
-            </section>
-
             <section data-markdown>
                 <textarea data-template>
                     <!-- .element: style="font-size:75%;" -->
@@ -285,18 +269,6 @@
                         #### ![](https://wanghenshui.github.io/assets/wepay.png)
                     </textarea>
                 </section>
-
-
-
-
-        
-            <section data-markdown>
-                <textarea data-template>
-                    <!-- .element: style="font-size:75%;" -->
-                    ## 参考资料
-
-                </textarea>
-            </section>
         </div>
     </div>
 
