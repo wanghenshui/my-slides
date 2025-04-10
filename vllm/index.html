@@ -234,8 +234,127 @@
                   </div>
             </section>
             
+            <section>
+                <h1>用户输入被调度</h1>
+                <div class="mermaid">
 
-        
+
+                    <pre>
+                        flowchart TD
+                        subgraph "Client进程<br>请求处理"
+                            START["用户发送请求"]
+                            ENCODE["processor.encode_request()<br>将文本转为token"]
+                            WRAP["EngineCoreRequest<br>封装请求"]
+                            SEND["MPClient.add_request()<br>发送请求"]
+                            WAIT["_run_engine()<br>等待结果"]
+                            RECEIVE["MPClient.get_output()<br>接收结果"]
+                            DECODE["processor.process_output()<br>解码结果"]
+                            END["返回给用户"]
+                            
+                            START --> ENCODE --> WRAP --> SEND --> WAIT --> RECEIVE --> DECODE --> END
+                        end
+                        
+                        subgraph "EngineCore进程<br>请求执行"
+                            RECV_REQ["接收请求<br>process_input_socket线程"]
+                            ADD_REQ["add_request()<br>添加到Scheduler"]
+                            SCH_WAIT["等待调度<br>waiting队列"]
+                            GET_PREFIX["get_computed_blocks()<br>检查prefix cache命中"]
+                            ALLOC["allocate_slots()<br>分配KVCache块"]
+                            SCH_RUN["调度执行<br>running队列"]
+                            PREPARE["_prepare_inputs()<br>准备模型输入"]
+                            EXEC["execute_model()<br>执行模型推理"]
+                            UPDATE["_update_states()<br>更新状态"]
+                            CACHE["cache_full_blocks()<br>缓存满的块"]
+                            OUT["输出结果<br>process_output_socket线程"]
+                            
+                            RECV_REQ --> ADD_REQ --> SCH_WAIT
+                            SCH_WAIT --> GET_PREFIX --> ALLOC --> SCH_RUN
+                            SCH_RUN --> PREPARE --> EXEC --> UPDATE --> CACHE --> OUT
+                        end
+                        
+                        SEND -.->|"socket.send_multipart()<br>序列化请求"| RECV_REQ
+                        OUT -.->|"socket.recv_multipart()<br>序列化结果"| RECEIVE
+                        
+                        subgraph "抢占恢复流程"
+                            FULL["KVCache空间不足"]
+                            SELECT["select_requests_to_preempt()<br>选择抢占对象"]
+                            PREEMPT["preempt_requests()<br>执行抢占"]
+                            FREE["free_blocks()<br>释放KVCache"]
+                            WAIT_AGAIN["重新进入waiting队列<br>保留prefix hash"]
+                            RESUME["恢复执行<br>命中prefix cache"]
+                            
+                            FULL --> SELECT --> PREEMPT --> FREE --> WAIT_AGAIN --> RESUME
+                        end
+                        
+                        ALLOC -->|"空间不足"| FULL
+                        RESUME --> GET_PREFIX
+                </pre>
+                  </div>
+            </section>
+       
+            <section>
+                <h1>Scheduler调度流程</h1>
+                <div class="mermaid">
+
+
+                    <pre>
+                        flowchart TD
+                        subgraph "Scheduler<br>core/scheduler.py"
+                            INIT_SCHED["__init__()<br>初始化调度器"]
+                            WAITING["waiting队列<br>等待调度的请求"]
+                            RUNNING["running队列<br>正在执行的请求"]
+                            REQ_MAP["requests字典<br>请求ID到请求对象映射"]
+                        end
+                        
+                        subgraph "调度流程<br>schedule()方法"
+                            SCHED_RUN["schedule_running_requests()<br>调度running队列中的请求"]
+                            ALLOCATE_RUN["为running请求分配KVCache<br>allocate_slots()"]
+                            CHECK_PREEMPT["抢占模式检查<br>is_preemption_needed()"]
+                            EXEC_PREEMPT["执行抢占<br>execute_preemption()"]
+                            SELECT_VICTIM["选择抢占对象<br>select_requests_to_preempt()"]
+                            PREEMPT_REQ["抢占请求<br>preempt_requests()"]
+                            FREE_BLOCKS["释放KVCache块<br>free_blocks()"]
+                            
+                            SCHED_WAIT["schedule_waiting_requests()<br>调度waiting队列"]
+                            GET_COMPUTED["获取命中prefix cache的块<br>get_computed_blocks()"]
+                            ALLOCATE_WAIT["为waiting请求分配KVCache<br>allocate_slots()"]
+                            
+                            SCHED_RUN --> ALLOCATE_RUN
+                            ALLOCATE_RUN -->|"分配失败"| CHECK_PREEMPT
+                            CHECK_PREEMPT -->|"需要抢占"| EXEC_PREEMPT
+                            EXEC_PREEMPT --> SELECT_VICTIM
+                            SELECT_VICTIM --> PREEMPT_REQ
+                            PREEMPT_REQ --> FREE_BLOCKS
+                            FREE_BLOCKS --> ALLOCATE_RUN
+                            
+                            SCHED_WAIT --> GET_COMPUTED
+                            GET_COMPUTED --> ALLOCATE_WAIT
+                        end
+                        
+                        subgraph "模型执行<br>worker/gpu_model_runner.py"
+                            PREPARE["_prepare_inputs()<br>准备输入数据"]
+                            UPDATE["_update_states()<br>更新状态"]
+                            EXECUTE["execute_model()<br>执行模型推理"]
+                        end
+                        
+                        INIT_SCHED --> WAITING
+                        INIT_SCHED --> RUNNING
+                        INIT_SCHED --> REQ_MAP
+                        
+                        WAITING --> SCHED_WAIT
+                        RUNNING --> SCHED_RUN
+                        
+                        ALLOCATE_RUN -->|"成功"| PREPARE
+                        ALLOCATE_WAIT -->|"成功"| PREPARE
+                        
+                        PREPARE --> UPDATE --> EXECUTE
+                        
+                        ALLOCATE_WAIT -->|"成功后加入running"| RUNNING
+                        PREEMPT_REQ -->|"被抢占的请求加入waiting"| WAITING
+                </pre>
+                  </div>
+            </section>
+
             
             <section>
                 <h1>kvcache管理初始化</h1>
@@ -290,13 +409,6 @@
                 <section data-markdown>
                     <textarea data-template>
                         ## Q/A
-                    </textarea>
-                </section>
-
-                <section data-markdown>
-                    <textarea data-template>
-                        ## 参考资料 {.left}
-
                         - https://github.com/vllm-project/vllm
                     </textarea>
                 </section>
