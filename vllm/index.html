@@ -56,12 +56,11 @@
                 <textarea data-template>
                     <!-- .element: style="font-size:80%;" -->
                     <h1 style="text-align: left;">vllm接口</h1>
-                    非常简单
-                    ### server {.left}
+                    <h2 style="text-align: left;">server</h2>
                     ```shell
                     vllm serve meta-llama/Meta-Llama-3.1-8B
                     ```
-                    ### client {.left}
+                    <h2 style="text-align: left;">client</h2>
                     ```shell
                     curl http://localhost:8000/v1/completions \
                     -H "Content-Type: application/json" \
@@ -80,7 +79,7 @@
             <section data-markdown>
                 <textarea data-template>
                     <!-- .element: style="font-size:75%;" -->
-                    ## 整体框架 {.left}
+                    <h1 style="text-align: left;">整体框架</h1>
                     ![](./vllm1.png) <!-- .element height="80%" width="80%" -->
                     
                     即便从V0演化到了分离式架构V1 组件还是这些
