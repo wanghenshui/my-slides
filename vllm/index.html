@@ -355,6 +355,92 @@
                   </div>
             </section>
 
+
+
+            <section>
+                <h1>model计算流程</h1>
+                <div class="mermaid">
+
+
+                    <pre>
+                        flowchart TD
+                        %% 初始化阶段
+                        subgraph "初始化阶段"
+                            INIT["GPUModelRunner.__init__()"] --> GET_BACKEND["get_attn_backend()"]
+                            GET_BACKEND --> BUILDER["attn_metadata_builder = backend.get_builder_cls()()"]
+                            
+                            INIT --> CONFIG["配置参数设置"]
+                            CONFIG --> SLIDING["sliding_window/interleaved_sliding_window<br>window_size = sliding_window or interleaved_sliding_window"]
+                            CONFIG --> BLOCK_SIZE["block_size = cache_config.block_size"]
+                            CONFIG --> MM_CHECK["is_multimodal_model = model_config.is_multimodal_model"]
+                            CONFIG --> MROPE_CHECK["uses_mrope = model_config.uses_mrope"]
+                            CONFIG --> ALIBI_CHECK["use_alibi = check_use_alibi(model_config)"]
+                        end
+                        
+                        %% KV缓存初始化
+                        subgraph "KV缓存初始化"
+                            INIT_KV["initialize_kv_cache(kv_cache_config)"] --> GET_SPEC["get_kv_cache_spec()"]
+                            
+                            GET_SPEC --> CREATE_SPECS["为每个Attention层创建KVCacheSpec"]
+                            CREATE_SPECS --> SW_SPEC["SlidingWindowSpec<br>如果attention.sliding_window不为None"]
+                            CREATE_SPECS --> FULL_SPEC["FullAttentionSpec<br>标准全注意力"]
+                            
+                            SW_SPEC --> CREATE_KV["kv_caches[layer] = torch.zeros()<br>使用attn_backend.get_kv_cache_shape()"]
+                            FULL_SPEC --> CREATE_KV
+                            
+                            CREATE_KV --> BIND_KV["bind_kv_cache(kv_caches, forward_context, self.kv_caches)"]
+                        end
+                        
+                        %% 请求处理流程
+                        subgraph "请求处理阶段"
+                            EXEC_MODEL["execute_model(scheduler_output)"] --> UPDATE_STATES["_update_states(scheduler_output)"]
+                            
+                            UPDATE_STATES --> CHECK_MM["if self.is_multimodal_model"]
+                            CHECK_MM -->|"True"| MM_EXEC["_execute_mm_encoder(scheduler_output)<br>_gather_mm_embeddings(scheduler_output)"]
+                            
+                            UPDATE_STATES --> PREPARE["_prepare_inputs(scheduler_output)"]
+                            PREPARE --> REORDER["attn_metadata_builder.reorder_batch()"]
+                            
+                            PREPARE --> CALC_PREFIX["_compute_cascade_attn_prefix_len(<br>num_scheduled_tokens, num_common_prefix_blocks)"]
+                            CALC_PREFIX --> USE_CASCADE["attn_backend.use_cascade_attention()"]
+                            
+                            PREPARE --> BUILD_META["attn_metadata_builder.build(<br>num_reqs, num_actual_tokens, max_query_len, common_prefix_len)"]
+                            BUILD_META --> FLASH_META["FlashAttentionMetadata"]
+                        end
+                        
+                        %% 前向计算阶段
+                        subgraph "前向计算阶段"
+                            PREPARE --> SET_CTX["set_forward_context(attn_metadata, vllm_config)"]
+                            SET_CTX --> MODEL_FWD["model(input_ids, positions, intermediate_tensors, inputs_embeds)"]
+                            
+                            CHECK_MM -->|"True"| PREPARE_MM["准备多模态输入"]
+                            PREPARE_MM --> GET_EMBEDS["inputs_embeds = model.get_input_embeddings(input_ids, mm_embeds)"]
+                            
+                            MROPE_CHECK -->|"True"| USE_MROPE["positions = mrope_positions[:, :num_tokens]<br>_calc_mrope_positions()"]
+                            MROPE_CHECK -->|"False"| USE_STD_POS["positions = self.positions[:num_tokens]"]
+                        end
+                        
+                        %% 输出处理阶段
+                        subgraph "输出处理阶段"
+                            MODEL_FWD --> GET_HIDDEN["hidden_states = model.forward()"]
+                            GET_HIDDEN --> COMPUTE_LOG["logits = model.compute_logits(hidden_states, None)"]
+                            
+                            COMPUTE_LOG --> GRAMMAR["apply_grammar_bitmask()"]
+                            GRAMMAR --> SAMPLE["sampler_output = model.sample(logits, sampling_metadata)"]
+                            
+                            SAMPLE --> OUT_TOKENS["获取采样token IDs"]
+                            OUT_TOKENS --> SPEC_CHECK["检查是否使用推测解码"]
+                            SPEC_CHECK -->|"True"| DRAFT["draft_token_ids = generate_draft_token_ids()/drafter.propose()"]
+                        end
+                        
+                        %% 关键连接
+                        FLASH_META --> SET_CTX
+                        MM_EXEC --> PREPARE_MM
+                </pre>
+                  </div>
+            </section>
+
+
             
             <section>
                 <h1>kvcache管理初始化</h1>
