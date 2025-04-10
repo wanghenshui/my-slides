@@ -54,6 +54,7 @@
 
             <section data-markdown>
                 <textarea data-template>
+                    <!-- .element: style="font-size:80%;" -->
                     <h1 style="text-align: left;">vllm接口</h1>
                     非常简单
                     ### server {.left}
@@ -88,6 +89,7 @@
 
             <section>
                 <div class="mermaid">
+                    <pre>
                     flowchart TD
                     subgraph "EngineCore初始化<br>engine/core.py"
                         INIT_ENGINE["EngineCore.__init__()<br>引擎初始化"]
@@ -129,7 +131,7 @@
                     LOAD_MODEL --> GPU_RUNNER
                     GPU_RUNNER --> ALLOC_KV
                     ALLOC_KV --> KV_SHAPE
-                
+                </pre>
                   </div>
             </section>
             <section>
@@ -155,6 +157,8 @@
     <script src="../reveal.js/plugin/notes/notes.js"></script>
     <script src="../reveal.js/plugin/markdown/markdown.js"></script>
     <script src="../reveal.js/plugin/highlight/highlight.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.5/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js-mermaid-plugin@11.4.1/plugin/mermaid/mermaid.js"></script>
     <script>
         // More info about initialization & config:
         // - https://revealjs.com/initialization/
@@ -177,8 +181,14 @@
             progress: true,
             center: true,
             hash: true,
+            mermaid: {
+            // flowchart: {
+            //   curve: 'linear',
+            // },
+            },
+
             // Learn about plugins: https://revealjs.com/plugins/
-            plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
+            plugins: [RevealMarkdown, RevealHighlight, RevealNotes, RevealMermaid]
         });
     </script>
 </body>
