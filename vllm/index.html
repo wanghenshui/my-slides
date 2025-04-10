@@ -31,108 +31,107 @@
                     - 架构/设计
   			    </textarea>
             </section>
-            <section>
-                <section data-markdown>
-                    <textarea data-template>
-                        <!-- .element: style="font-size:80%;" -->
-                        ## 背景
-                        - llm推理需求显著，相关服务众多但效率低下
-                        - 需要一个快速且方便使用/定制的llm推理服务 
-                        ```python
-                        from vllm import LLM
 
-                        # Example prompts.
-                        prompts = ["Hello, my name is", "The capital of France is"]
-                        # Create an LLM with HF model name.
-                        llm = LLM(model="meta-llama/Meta-Llama-3.1-8B")
-                        # Generate texts from the prompts. 
-                        outputs = llm.generate(prompts) # also llm.chat(messages)]
-                        ```
-                    </textarea>
-                </section>
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:80%;" -->
+                    ## 背景
+                    - llm推理需求显著，相关服务众多但效率低下
+                    - 需要一个快速且方便使用/定制的llm推理服务
 
-                <section data-markdown>
-                    <textarea data-template>
-                        <!-- .element: style="font-size:80%;" -->
-                        ## vllm接口
-                        非常简单
-                        ### server
-                        ```shell
-                        vllm serve meta-llama/Meta-Llama-3.1-8B
-                        ```
-                        ### client
-                        ```shell
-                        curl http://localhost:8000/v1/completions \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "model": "meta-llama/Meta-Llama-3.1-8B",
-                            "prompt": "San Francisco is a",
-                            "max_tokens": 7,
-                            "temperature": 0
-                        }'
+                    ```python
+                    from vllm import LLM
 
-                        ```
-
-                    </textarea>
-                </section>
-
-                <section>
-                    <div class="mermaid">
-                        flowchart TD
-                        subgraph "EngineCore初始化<br>engine/core.py"
-                            INIT_ENGINE["EngineCore.__init__()<br>引擎初始化"]
-                            INIT_EXECUTOR["初始化Executor<br>executor_class.__init__()"]
-                            AVAIL_MEM["determine_available_memory()<br>确定可用显存"]
-                            GET_KV_CONFIG["get_kv_cache_config()<br>获取KV缓存配置"]
-                            INIT_KV["initialize_from_config()<br>初始化KV缓存"]
-                            INIT_SCHED["初始化Scheduler<br>Scheduler()"]
-                        end
-                        
-                        subgraph "Executor初始化<br>执行者初始化"
-                            MP_INIT["MultiprocExecutor._init_executor()<br>多进程执行者初始化"]
-                            CREATE_MQ["创建消息队列<br>rpc_broadcast_mq"]
-                            CREATE_WORKERS["创建Worker进程<br>make_worker_process()"]
-                            WORKER_INIT["Worker进程初始化<br>worker_main()"]
-                            INIT_DEVICE["初始化设备<br>init_device()"]
-                            LOAD_MODEL["加载模型<br>load_model()"]
-                        end
-                        
-                        subgraph "Worker KV缓存<br>worker/gpu_model_runner.py"
-                            GPU_RUNNER["GPUModelRunner.__init__()<br>GPU模型运行器初始化"]
-                            ALLOC_KV["分配KV缓存Tensor<br>每层2个(K/V)"]
-                            KV_SHAPE["KV缓存形状<br>(2, num_blocks, block_size, kv_head, head_size)"]
-                        end
-                        
-                        INIT_ENGINE --> INIT_EXECUTOR
-                        INIT_ENGINE --> AVAIL_MEM
-                        AVAIL_MEM --> GET_KV_CONFIG
-                        GET_KV_CONFIG --> INIT_KV
-                        INIT_KV --> INIT_SCHED
-                        
-                        INIT_EXECUTOR --> MP_INIT
-                        MP_INIT --> CREATE_MQ
-                        MP_INIT --> CREATE_WORKERS
-                        CREATE_WORKERS --> WORKER_INIT
-                        WORKER_INIT --> INIT_DEVICE
-                        WORKER_INIT --> LOAD_MODEL
-                        
-                        LOAD_MODEL --> GPU_RUNNER
-                        GPU_RUNNER --> ALLOC_KV
-                        ALLOC_KV --> KV_SHAPE
-                    
-                      </div>
-                </section>
-
-                <section data-markdown>
-                    <textarea data-template>
-                        <!-- .element: style="font-size:75%;" -->
-                        ## 整体框架
-                        ![](./vllm1.png) <!-- .element height="80%" width="80%" -->
-                        即便从V0演化到了分离式架构V1 组件还是这些
-                    </textarea>
-                </section>
+                    # Example prompts.
+                    prompts = ["Hello, my name is", "The capital of France is"]
+                    # Create an LLM with HF model name.
+                    llm = LLM(model="meta-llama/Meta-Llama-3.1-8B")
+                    # Generate texts from the prompts. 
+                    outputs = llm.generate(prompts) # also llm.chat(messages)]
+                    ```
+                </textarea>
             </section>
 
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:80%;" -->
+                    ## vllm接口
+                    非常简单
+                    ### server
+                    ```shell
+                    vllm serve meta-llama/Meta-Llama-3.1-8B
+                    ```
+                    ### client
+                    ```shell
+                    curl http://localhost:8000/v1/completions \
+                    -H "Content-Type: application/json" \
+                    -d '{
+                        "model": "meta-llama/Meta-Llama-3.1-8B",
+                        "prompt": "San Francisco is a",
+                        "max_tokens": 7,
+                        "temperature": 0
+                    }'
+
+                    ```
+
+                </textarea>
+            </section>
+
+            <section data-markdown>
+                <textarea data-template>
+                    <!-- .element: style="font-size:75%;" -->
+                    ## 整体框架
+                    ![](./vllm1.png) <!-- .element height="80%" width="80%" -->
+                    即便从V0演化到了分离式架构V1 组件还是这些
+                </textarea>
+            </section>
+
+            <section>
+                <div class="mermaid">
+                    flowchart TD
+                    subgraph "EngineCore初始化<br>engine/core.py"
+                        INIT_ENGINE["EngineCore.__init__()<br>引擎初始化"]
+                        INIT_EXECUTOR["初始化Executor<br>executor_class.__init__()"]
+                        AVAIL_MEM["determine_available_memory()<br>确定可用显存"]
+                        GET_KV_CONFIG["get_kv_cache_config()<br>获取KV缓存配置"]
+                        INIT_KV["initialize_from_config()<br>初始化KV缓存"]
+                        INIT_SCHED["初始化Scheduler<br>Scheduler()"]
+                    end
+                    
+                    subgraph "Executor初始化<br>执行者初始化"
+                        MP_INIT["MultiprocExecutor._init_executor()<br>多进程执行者初始化"]
+                        CREATE_MQ["创建消息队列<br>rpc_broadcast_mq"]
+                        CREATE_WORKERS["创建Worker进程<br>make_worker_process()"]
+                        WORKER_INIT["Worker进程初始化<br>worker_main()"]
+                        INIT_DEVICE["初始化设备<br>init_device()"]
+                        LOAD_MODEL["加载模型<br>load_model()"]
+                    end
+                    
+                    subgraph "Worker KV缓存<br>worker/gpu_model_runner.py"
+                        GPU_RUNNER["GPUModelRunner.__init__()<br>GPU模型运行器初始化"]
+                        ALLOC_KV["分配KV缓存Tensor<br>每层2个(K/V)"]
+                        KV_SHAPE["KV缓存形状<br>(2, num_blocks, block_size, kv_head, head_size)"]
+                    end
+                    
+                    INIT_ENGINE --> INIT_EXECUTOR
+                    INIT_ENGINE --> AVAIL_MEM
+                    AVAIL_MEM --> GET_KV_CONFIG
+                    GET_KV_CONFIG --> INIT_KV
+                    INIT_KV --> INIT_SCHED
+                    
+                    INIT_EXECUTOR --> MP_INIT
+                    MP_INIT --> CREATE_MQ
+                    MP_INIT --> CREATE_WORKERS
+                    CREATE_WORKERS --> WORKER_INIT
+                    WORKER_INIT --> INIT_DEVICE
+                    WORKER_INIT --> LOAD_MODEL
+                    
+                    LOAD_MODEL --> GPU_RUNNER
+                    GPU_RUNNER --> ALLOC_KV
+                    ALLOC_KV --> KV_SHAPE
+                
+                  </div>
+            </section>
             <section>
                 <section data-markdown>
                     <textarea data-template>
