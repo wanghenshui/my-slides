@@ -56,13 +56,13 @@
                 <textarea data-template>
                     <!-- .element: style="font-size:80%;" -->
                     <h3 style="text-align: left;">vllm接口</h2>
-                    <h4 style="text-align: left;">server</h3>
+                    <h4 style="text-align: left;">server</h4>
 
                     ```shell
                     vllm serve meta-llama/Meta-Llama-3.1-8B
                     ```
 
-                    <h3 style="text-align: left;">client</h3>
+                    <h4 style="text-align: left;">client</h4>
 
                     ```shell
                     curl http://localhost:8000/v1/completions \
@@ -91,7 +91,10 @@
             </section>
 
             <section>
+                <h1>整体框架</h1>
                 <div class="mermaid">
+
+
                     <pre>
                     flowchart TD
                     subgraph "EngineCore初始化<br>engine/core.py"
@@ -137,6 +140,58 @@
                 </pre>
                   </div>
             </section>
+            
+
+            
+            <section>
+                <h1>kvcache管理初始化</h1>
+                <div class="mermaid">
+                    <pre>
+                        flowchart TD
+                        subgraph "KVCacheManager<br>core/kv_cache_manager.py"
+                            INIT_KV["__init__()<br>初始化KVCache管理器"]
+                            BLOCK_POOL["BlockPool<br>block_pool.py"]
+                            REQ_BLOCKS["req_to_blocks<br>请求ID到KVCache块映射"]
+                            REQ_HASH["req_to_block_hashes<br>请求ID到块Hash映射"]
+                            
+                            INIT_KV --> BLOCK_POOL
+                            INIT_KV --> REQ_BLOCKS
+                            INIT_KV --> REQ_HASH
+                        end
+                        
+                        subgraph "BlockPool<br>core/block_pool.py"
+                            INIT_BP["__init__()<br>创建所有KVCacheBlock"]
+                            FREE_Q["free_block_queue<br>空闲块LRU链表"]
+                            CACHED_MAP["cached_block_hash_to_block<br>Hash值到块的映射"]
+                            ALLOC["allocate()<br>分配一个块"]
+                            FREE["free()<br>释放一个块"]
+                            
+                            INIT_BP --> FREE_Q
+                            INIT_BP --> CACHED_MAP
+                            ALLOC --> FREE_Q
+                            FREE --> FREE_Q
+                        end
+                        
+                        subgraph "调度函数<br>core/scheduler.py"
+                            GET_COMP["get_computed_blocks()<br>获取命中prefix cache的块"]
+                            ALLOCATE["allocate_slots()<br>分配KVCache块"]
+                            CACHE_FULL["cache_full_blocks()<br>缓存已满的块"]
+                            
+                            ALLOCATE --> |"调用"| CACHE_FULL
+                        end
+                        
+                        GET_COMP --> |"查询"| REQ_HASH
+                        GET_COMP --> |"返回命中的块"| ALLOCATE
+                        ALLOCATE --> |"申请块<br>block_pool.allocate()"| ALLOC
+                        ALLOCATE --> |"更新"| REQ_BLOCKS
+                        CACHE_FULL --> |"计算hash并添加<br>cached_block_hash_to_block[hash]=block"| CACHED_MAP
+                    
+                    
+                </pre>
+                  </div>
+            </section>
+        
+
             <section>
                 <section data-markdown>
                     <textarea data-template>
