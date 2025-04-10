@@ -183,8 +183,59 @@
                 </pre>
                   </div>
             </section>
+
+            <section>
+                <h1>用户输入交互</h1>
+                <div class="mermaid">
+
+
+                    <pre>
+                        flowchart LR
+                        subgraph "Client进程<br>API Server"
+                            PROMPT["用户输入Prompt"]
+                            LLM_GEN["LLM.generate()<br>entrypoints/llm.py"]
+                            ADD_REQ["_add_request()<br>LLMEngine.add_request()"]
+                            TOKENIZE["processor.encode_request()<br>输入处理/分词"]
+                            RUN_ENGINE["_run_engine()<br>while循环调用step"]
+                            GET_OUT["LLMEngine.step()<br>engine_core.get_output()"]
+                            DE_TOKEN["processor.process_output()<br>解码token"]
+                            RESULT["返回结果给用户"]
+                            
+                            PROMPT --> LLM_GEN
+                            LLM_GEN --> ADD_REQ
+                            ADD_REQ --> TOKENIZE
+                            LLM_GEN --> RUN_ENGINE
+                            RUN_ENGINE --> GET_OUT
+                            GET_OUT --> DE_TOKEN --> RESULT
+                        end
+                        
+                        subgraph "EngineCore进程"
+                            INPUT_Q["input_queue<br>EngineCoreProc成员"]
+                            PROC_INPUT["process_input_socket线程<br>接收请求"]
+                            BUSY_LOOP["run_busy_loop<br>主线程循环"]
+                            HANDLE_REQ["_handle_client_request()<br>处理客户端请求"]
+                            ADD_TO_SCHED["EngineCore.add_request()<br>添加到Scheduler"]
+                            SCHED_STEP["EngineCore.step()<br>执行一次调度"]
+                            OUTPUT_Q["output_queue<br>EngineCoreProc成员"]
+                            PROC_OUTPUT["process_output_socket线程<br>发送结果"]
+                            
+                            PROC_INPUT --> INPUT_Q
+                            INPUT_Q --> BUSY_LOOP
+                            BUSY_LOOP --> HANDLE_REQ
+                            HANDLE_REQ --> ADD_TO_SCHED
+                            BUSY_LOOP --> SCHED_STEP
+                            SCHED_STEP --> OUTPUT_Q
+                            OUTPUT_Q --> PROC_OUTPUT
+                        end
+                        
+                        ADD_REQ -->|"socket.send_multipart()<br>序列化请求"| PROC_INPUT
+                        PROC_OUTPUT -->|"socket.recv_multipart()<br>反序列化结果"| GET_OUT
+                </pre>
+                  </div>
+            </section>
             
 
+        
             
             <section>
                 <h1>kvcache管理初始化</h1>
