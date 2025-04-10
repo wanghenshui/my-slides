@@ -90,8 +90,51 @@
                 </textarea>
             </section>
 
+
+ 
             <section>
-                <h1>整体框架</h1>
+                <h1>多进程架构交互</h1>
+                <div class="mermaid">
+
+
+                    <pre>
+                        flowchart TD
+                        subgraph "多进程架构"
+                            API_SERVER["API Server进程<br>处理用户请求/分词/解码"]
+                            ENGINE_CORE["EngineCore进程<br>调度/GPU推理"]
+                            API_SERVER <--> |"ZeroMQ IPC<br>SyncMPClient/AsyncMPClient"| ENGINE_CORE
+                        end
+                    
+                        subgraph "EngineCore内部结构"
+                            CORE["EngineCore<br>core.py"]
+                            SCHEDULER["Scheduler<br>core/scheduler.py"]
+                            KV_CACHE_MGR["KVCacheManager<br>core/kv_cache_manager.py"]
+                            EXECUTOR["ModelExecutor<br>executor/"]
+                            
+                            CORE --> SCHEDULER
+                            CORE --> KV_CACHE_MGR
+                            CORE --> EXECUTOR
+                        end
+                        
+                        subgraph "Executor架构"
+                            EXECUTOR_CLASS["ExecutorClass<br>executor/__init__.py"]
+                            MULTIPROC_EXEC["MultiprocExecutor<br>executor/mp.py"]
+                            WORKER_PROCS["Worker进程<br>WorkerProc.worker_main()"]
+                            GPU_MODEL["GPUModelRunner<br>worker/gpu_model_runner.py"]
+                            
+                            EXECUTOR_CLASS --> MULTIPROC_EXEC
+                            MULTIPROC_EXEC --> |"创建<br>make_worker_process()"| WORKER_PROCS
+                            WORKER_PROCS --> GPU_MODEL
+                        end
+                        
+                        ENGINE_CORE --- CORE
+                </pre>
+                  </div>
+            </section>
+                      
+
+            <section>
+                <h1>执行Engine初始化</h1>
                 <div class="mermaid">
 
 
