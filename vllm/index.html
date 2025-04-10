@@ -440,7 +440,87 @@
                   </div>
             </section>
 
+            <section>
+                <h1>注意力计算流程</h1>
+                <div class="mermaid">
 
+
+                    <pre>
+                        flowchart TD
+                        %% 注意力层初始化
+                        subgraph "注意力层初始化"
+                            ATTN_INIT["Attention.__init__(<br>num_heads, head_size, scale, num_kv_heads...)"]
+                            
+                            ATTN_INIT --> CONFIG_SETUP["设置配置参数:<br>sliding_window, block_size<br>kv_cache_dtype, is_attention_free"]
+                            ATTN_INIT --> SCALES_INIT["初始化缩放系数:<br>self._q_scale, self._k_scale, self._v_scale = 1.0"]
+                            
+                            ATTN_INIT --> GET_BACKEND["获取注意力后端:<br>get_attn_backend(head_size, dtype, kv_cache_dtype...)"]
+                            GET_BACKEND --> IMPL_CLS["获取实现类:<br>impl_cls = attn_backend.get_impl_cls()"]
+                            IMPL_CLS --> CREATE_IMPL["创建实现实例:<br>self.impl = impl_cls(num_heads, head_size, scale...)"]
+                            
+                            ATTN_INIT --> KV_CACHE_SETUP["初始化KV缓存占位:<br>self.kv_cache = [torch.tensor([]) for ...]"]
+                        end
+                        
+                        %% 注意力前向计算
+                        subgraph "注意力前向计算 (forward)"
+                            ATTN_FWD["Attention.forward(<br>query, key, value, output_shape=None)"]
+                            
+                            ATTN_FWD --> CHECK_CALC["检查是否需要计算K/V缩放系数<br>if self.calculate_kv_scales"]
+                            CHECK_CALC -->|"是"| CALC_SCALES["calc_kv_scales(query, key, value)<br>计算张量极值与参考范围的比值"]
+                            
+                            ATTN_FWD --> CHECK_OUTPUT["是否使用输出缓冲区<br>if self.use_output"]
+                            
+                            CHECK_OUTPUT -->|"是"| WITH_OUTPUT["使用预分配输出buffer"]
+                            WITH_OUTPUT --> RESHAPE_QKV["调整QKV形状:<br>query.view(-1, num_heads, head_size)<br>key/value.view(-1, num_kv_heads, head_size)"]
+                            RESHAPE_QKV --> CHECK_DIRECT["检查调用方式<br>if self.use_direct_call"]
+                            
+                            CHECK_DIRECT -->|"直接调用"| GET_CTX["获取前向上下文:<br>forward_context = get_forward_context()"]
+                            GET_CTX --> GET_META["获取注意力元数据:<br>attn_metadata = forward_context.attn_metadata"]
+                            GET_META --> GET_KV["获取KV缓存:<br>self_kv_cache = self.kv_cache[virtual_engine]"]
+                            GET_KV --> CALL_IMPL["调用具体实现:<br>self.impl.forward(self, query, key, value, <br>self_kv_cache, attn_metadata, output=output)"]
+                            
+                            CHECK_DIRECT -->|"自定义算子"| CALL_OP["调用统一注意力算子:<br>torch.ops.vllm.unified_attention_with_output(...)"]
+                            
+                            WITH_OUTPUT --> RESHAPE_OUT["重塑输出:<br>output.view(-1, hidden_size)"]
+                            
+                            CHECK_OUTPUT -->|"否"| NO_OUTPUT["不使用预分配输出"]
+                            NO_OUTPUT --> CHECK_DIRECT2["检查调用方式"]
+                            CHECK_DIRECT2 -->|"直接调用"| DIRECT_IMPL["直接调用具体实现"]
+                            CHECK_DIRECT2 -->|"自定义算子"| CALL_OP2["调用统一注意力算子"]
+                        end
+                        
+                        %% KV缓存缩放计算
+                        subgraph "KV缓存缩放计算 (calc_kv_scales)"
+                            CALC_KV["calc_kv_scales(query, key, value)"]
+                            CALC_KV --> Q_SCALE["计算Q缩放: self._q_scale = torch.abs(query).max() / self.q_range"]
+                            CALC_KV --> K_SCALE["计算K缩放: self._k_scale = torch.abs(key).max() / self.k_range"]
+                            CALC_KV --> V_SCALE["计算V缩放: self._v_scale = torch.abs(value).max() / self.v_range"]
+                            CALC_KV --> SET_FLOAT["设置浮点缩放值:<br>self._k_scale_float = self._k_scale.item()<br>self._v_scale_float = self._v_scale.item()"]
+                            CALC_KV --> DISABLE_CALC["禁用后续计算:<br>self.calculate_kv_scales = False"]
+                        end
+                        
+                        %% 自定义算子实现
+                        subgraph "统一注意力算子实现"
+                            UNIFIED["unified_attention(query, key, value, layer_name)"]
+                            UNIFIED --> GET_CTX2["获取前向上下文"]
+                            GET_CTX2 --> GET_LAYER["获取层实例:<br>self = forward_context.no_compile_layers[layer_name]"]
+                            GET_LAYER --> GET_KV2["获取KV缓存"]
+                            GET_KV2 --> CALL_BACKEND["调用后端实现:<br>self.impl.forward(...)"]
+                            
+                            UNIFIED_OUT["unified_attention_with_output(<br>query, key, value, output, layer_name)"]
+                            UNIFIED_OUT --> SIMILAR["类似流程，但将结果写入预分配的output"]
+                        end
+                        
+                        %% 主要连接线
+                        CALL_IMPL --> RESHAPE_OUT
+                        CALL_OP --> RESHAPE_OUT
+                        DIRECT_IMPL --> ATTN_FWD
+                        CALL_OP2 --> ATTN_FWD
+                </pre>
+                  </div>
+            </section>
+
+        
             
             <section>
                 <h1>kvcache管理初始化</h1>
@@ -489,7 +569,92 @@
                 </pre>
                   </div>
             </section>
-        
+
+            <section>
+                <h1>整体流程</h1>
+                <div class="mermaid">
+                    <pre>
+                        flowchart TD
+                        %% 初始化阶段
+                        subgraph "初始化阶段"
+                            INIT["GPUModelRunner.__init__()"] --> GET_BACKEND["get_attn_backend()"]
+                            GET_BACKEND --> BUILDER["attn_metadata_builder = backend.get_builder_cls()()"]
+                            
+                            INIT --> CONFIG["配置参数设置"]
+                            CONFIG --> SLIDING["sliding_window/interleaved_sliding_window<br>window_size = sliding_window or interleaved_sliding_window"]
+                            CONFIG --> BLOCK_SIZE["block_size = cache_config.block_size"]
+                            CONFIG --> MM_CHECK["is_multimodal_model = model_config.is_multimodal_model"]
+                            CONFIG --> MROPE_CHECK["uses_mrope = model_config.uses_mrope"]
+                            CONFIG --> ALIBI_CHECK["use_alibi = check_use_alibi(model_config)"]
+                        end
+                        
+                        %% KV缓存初始化
+                        subgraph "KV缓存初始化"
+                            INIT_KV["initialize_kv_cache(kv_cache_config)"] --> GET_SPEC["get_kv_cache_spec()"]
+                            
+                            GET_SPEC --> CREATE_SPECS["为每个Attention层创建KVCacheSpec"]
+                            CREATE_SPECS --> SW_SPEC["SlidingWindowSpec<br>如果attention.sliding_window不为None"]
+                            CREATE_SPECS --> FULL_SPEC["FullAttentionSpec<br>标准全注意力"]
+                            
+                            SW_SPEC --> CREATE_KV["kv_caches[layer] = torch.zeros()<br>使用attn_backend.get_kv_cache_shape()"]
+                            FULL_SPEC --> CREATE_KV
+                            
+                            CREATE_KV --> BIND_KV["bind_kv_cache(kv_caches, forward_context, self.kv_caches)"]
+                        end
+                        
+                        %% 请求处理流程
+                        subgraph "请求处理阶段"
+                            EXEC_MODEL["execute_model(scheduler_output)"] --> UPDATE_STATES["_update_states(scheduler_output)"]
+                            
+                            UPDATE_STATES --> CHECK_MM["if self.is_multimodal_model"]
+                            CHECK_MM -->|"True"| MM_EXEC["_execute_mm_encoder(scheduler_output)<br>_gather_mm_embeddings(scheduler_output)"]
+                            
+                            UPDATE_STATES --> PREPARE["_prepare_inputs(scheduler_output)"]
+                            PREPARE --> REORDER["attn_metadata_builder.reorder_batch()"]
+                            
+                            PREPARE --> CALC_PREFIX["_compute_cascade_attn_prefix_len(<br>num_scheduled_tokens, num_common_prefix_blocks)"]
+                            CALC_PREFIX --> USE_CASCADE["attn_backend.use_cascade_attention()"]
+                            
+                            PREPARE --> BUILD_META["attn_metadata_builder.build(<br>num_reqs, num_actual_tokens, max_query_len, common_prefix_len)"]
+                            BUILD_META --> FLASH_META["FlashAttentionMetadata"]
+                        end
+                        
+                        %% 前向计算阶段
+                        subgraph "前向计算阶段"
+                            PREPARE --> SET_CTX["set_forward_context(attn_metadata, vllm_config)"]
+                            SET_CTX --> MODEL_FWD["model(input_ids, positions, intermediate_tensors, inputs_embeds)"]
+                            
+                            CHECK_MM -->|"True"| PREPARE_MM["准备多模态输入"]
+                            PREPARE_MM --> GET_EMBEDS["inputs_embeds = model.get_input_embeddings(input_ids, mm_embeds)"]
+                            
+                            MROPE_CHECK -->|"True"| USE_MROPE["positions = mrope_positions[:, :num_tokens]<br>_calc_mrope_positions()"]
+                            MROPE_CHECK -->|"False"| USE_STD_POS["positions = self.positions[:num_tokens]"]
+                        end
+                        
+                        %% 输出处理阶段
+                        subgraph "输出处理阶段"
+                            MODEL_FWD --> GET_HIDDEN["hidden_states = model.forward()"]
+                            GET_HIDDEN --> COMPUTE_LOG["logits = model.compute_logits(hidden_states, None)"]
+                            
+                            COMPUTE_LOG --> GRAMMAR["apply_grammar_bitmask()"]
+                            GRAMMAR --> SAMPLE["sampler_output = model.sample(logits, sampling_metadata)"]
+                            
+                            SAMPLE --> OUT_TOKENS["获取采样token IDs"]
+                            OUT_TOKENS --> SPEC_CHECK["检查是否使用推测解码"]
+                            SPEC_CHECK -->|"True"| DRAFT["draft_token_ids = generate_draft_token_ids()/drafter.propose()"]
+                        end
+                        
+                        %% 关键连接
+                        FLASH_META --> SET_CTX
+                        MM_EXEC --> PREPARE_MM
+                        
+                    
+                    
+                </pre>
+                  </div>
+            </section>
+
+
 
             <section>
                 <section data-markdown>
