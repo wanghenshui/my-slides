@@ -56,10 +56,12 @@
                         <!-- .element: style="font-size:80%;" -->
                         ## vllm接口
                         非常简单
+                        ### server
                         ```shell
-                        # server
                         vllm serve meta-llama/Meta-Llama-3.1-8B
-                        # client
+                        ```
+                        ### client
+                        ```shell
                         curl http://localhost:8000/v1/completions \
                         -H "Content-Type: application/json" \
                         -d '{
@@ -160,11 +162,25 @@
         // - https://revealjs.com/config/
         Reveal.initialize({
             hash: true,
-
+            // PowerPoint 宽屏尺寸 (16:9)
+            width: 1280,
+            height: 720,
+            
+            // PowerPoint 标准尺寸 (4:3)
+            // width: 1024, 
+            // height: 768,
+            
+            // 控制内容缩放
+            margin: 0.1,
+            
+            // 其他常用配置
+            controls: true,
+            progress: true,
+            center: true,
+            hash: true,
             // Learn about plugins: https://revealjs.com/plugins/
             plugins: [RevealMarkdown, RevealHighlight, RevealNotes]
         });
-        
     </script>
 </body>
 
